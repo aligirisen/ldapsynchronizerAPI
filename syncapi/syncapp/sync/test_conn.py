@@ -1,3 +1,7 @@
+"""
+Author: Ali Riza Girisen
+Date: 17/11/2023
+"""
 import subprocess, time
 from ldap3 import *
 

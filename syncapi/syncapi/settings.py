@@ -21,11 +21,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-&nckvkapa+$)t9cb9v+gex%g1ol#te#6-sra2j_jz-0((_-!1t'
-CSRF_TRUSTED_ORIGINS = ['http://127.0.0.1:','http://localhost']
+CSRF_TRUSTED_ORIGINS = ['http://127.0.0.1:']
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['127.0.0.1','localhost']
+ALLOWED_HOSTS = ['127.0.0.1']
 
 
 # Application definition
