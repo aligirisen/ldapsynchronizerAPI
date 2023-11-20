@@ -1,4 +1,4 @@
-# [TR] ldapsynchronizerAPI
+# ldapsynchronizerAPI
 synchronizer API for active directory to ldap
 
 
