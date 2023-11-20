@@ -5,15 +5,13 @@ Date: 17/11/2023
 import subprocess, time, os
 from ldap3 import *
 def set_default(variable):
-    # grupların olduğu directory örneğin(cn=DnsAdmins ...)
     ldap_user_group_dn = "ou=User,ou=Groups,dc=lider,dc=com"
-    # active directory dizinlerini openldap'a geçirirken, aynı yapıyla openldap domain'in altına almak için boş bırakın. active directory ağacını belirli bir dizinin altına almak isterseniz kullanın. örneğin ldap_spec_directory_dn = ou=Ankara,ou=Turkey
     ldap_spec_directory_dn = "" 
-    # user/computer entry'lerin aranacağı yer. Güncellenecek kısmı seçin. Eğer default olarak bırakılırsa her yeri tarar.
     ad_user_search_dn = "dc=ornek,dc=local"
     ad_computer_search_dn = "dc=ornek,dc=local"
-    # active directory'deki tree yapısını ve  dizinleri(obje türü user ve computer olan dizinleri getirir) eşleme fonksiyonu. openldapda bulunmayan dizinleri yaratmak için aktif edin.
     sync_group = True
+    create_group = True
+    sync_computers = True
 
     if variable == "ldap_user_group_dn":
         variable = ldap_user_group_dn
@@ -25,17 +23,23 @@ def set_default(variable):
         variable = sync_group
     elif variable == "ldap_spec_directory_dn":
         variable = ldap_spec_directory_dn
+    elif variable == "create_group":
+        variable = create_group
+    elif variable == "sync_computers":
+        variable = sync_computers
 
     return variable
 def sync_data(ad_config, ldap_config, pref_config, input_dn):
 
-    config_list = ["ldap_spec_directory_dn","ldap_user_group_dn","sync_group_mode","ad_computer_search_dn","ad_user_search_dn"]
+    config_list = ["ldap_spec_directory_dn","ldap_user_group_dn","sync_group_mode","ad_computer_search_dn","ad_user_search_dn","create_group","sync_computers"]
     for variable in config_list:
         if variable not in pref_config:
             pref_config[variable] = set_default(variable)
     
     #PREF
     sync_group_mode = pref_config['sync_group_mode']
+    sync_computers = pref_config['sync_computers']
+    create_group = pref_config['create_group']
     ad_user_search_dn = pref_config['ad_user_search_dn']
     ad_computer_search_dn = pref_config['ad_computer_search_dn']
     ldap_user_group_dn = pref_config['ldap_user_group_dn']
@@ -108,6 +112,18 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn):
         for group in memberOf:
             group_dn = f"cn={group},{ldap_user_group_dn}"
             result = conn.modify(group_dn, {'member': [(MODIFY_ADD, [dn])]})
+            if not result and create_group is True:
+                object_class = ['top','groupOfNames']
+                members = [dn]
+                grp_attributes = {
+                        'objectClass': object_class,
+                        'cn': group,
+                        'description': group,
+                        'member': members,
+                        }
+                conn.add(group_dn, attributes=grp_attributes)
+
+
         search_filter_groups = f"(&(objectClass=groupOfNames)(member={dn}))"
         user_membership = conn.search(ldap_user_group_dn, search_filter=search_filter_groups)
         if user_membership:
@@ -286,7 +302,7 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn):
                         group = "adminGroups"
                     elif group == "Domain Admins":
                         group = "domainAdminGroup"
-                    else:
+                    elif not create_group:
                         group = ""
                     
                     if group:
@@ -322,16 +338,18 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn):
     if os.path.exists(delete_ldif):
         subprocess.run(delete_ldif, shell=True)
 
-    command_ad_computer = f'ldapsearch -x -b {ad_computer_search_dn} -H ldap://{ad_server}:{ad_port} -D {ad_username} -w {ad_password} "(objectClass=computer)" > ad_users.ldif'
-    print("Fetching - Active Directory Computers...")
-    result_ad_computer = subprocess.run(command_ad_computer, shell=True,stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-
-
-    command_ad = f'ldapsearch -x -D {ad_username} -w {ad_password} -H ldap://{ad_server}:{ad_port} -b {ad_user_search_dn} "(&(objectClass=person)(objectCategory=person)(!(sAMAccountName=krbtgt))(!(sAMAccountName=Administrator))(!(sAMAccountName=Guest)) )" -s sub -E pr=1000/noprompt  cn sn telephoneNumber mail homePostalAddress givenName sAMAccountName memberOf >> ad_users.ldif'
+    command_ad = f'ldapsearch -x -D {ad_username} -w {ad_password} -H ldap://{ad_server}:{ad_port} -b {ad_user_search_dn} "(&(objectClass=person)(objectCategory=person)(!(sAMAccountName=krbtgt))(!(sAMAccountName=Administrator))(!(sAMAccountName=Guest)) )" -s sub -E pr=1000/noprompt  cn sn telephoneNumber mail homePostalAddress givenName sAMAccountName memberOf > ad_users.ldif'
     result_ad = subprocess.run(command_ad, shell=True,stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     print("Fetching - Active Directory Users...")
+    
+    if sync_computers is True:
+        command_ad_computer = f'ldapsearch -x -b {ad_computer_search_dn} -H ldap://{ad_server}:{ad_port} -D {ad_username} -w {ad_password} "(objectClass=computer)" >> ad_users.ldif'
+        print("Fetching - Active Directory Computers...")
+        result_ad_computer = subprocess.run(command_ad_computer, shell=True,stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
-    if result_ad.returncode == 0 and result_ad_computer.returncode == 0:
+
+
+    if result_ad.returncode == 0:
         print("Successfully fetched.")
         total_lines_ad = int(subprocess.check_output(["wc", "-l", "ad_users.ldif"]).split()[0])
         print(result_ad.stdout)
