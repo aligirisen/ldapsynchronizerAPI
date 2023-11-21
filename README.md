@@ -26,9 +26,14 @@ ad_computer_search_dn = dc=ornek,dc=local
 ```
 
 
-### Create the directories which are does not exist in openldap site.
-``` sync_group = True ```
+### Create directories which are does not exist in openldap site.
+``` create_directory = True ```
 
+### Create groups which are does not exist in openldap site. (check up groups directory in pref_config)
+```create_group```
+
+### Sync computers mode
+``` sync_computer = True ```
 
 ### Example Request Body:
 ```

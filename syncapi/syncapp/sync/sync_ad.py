@@ -9,7 +9,7 @@ def set_default(variable):
     ldap_spec_directory_dn = "" 
     ad_user_search_dn = "dc=ornek,dc=local"
     ad_computer_search_dn = "dc=ornek,dc=local"
-    sync_group = True
+    create_directory = True
     create_group = True
     sync_computers = True
 
@@ -19,8 +19,8 @@ def set_default(variable):
         variable = ad_user_search_dn
     elif variable == "ad_computer_search_dn":
         variable = ad_computer_search_dn
-    elif variable == "sync_group":
-        variable = sync_group
+    elif variable == "create_directory":
+        variable = create_directory
     elif variable == "ldap_spec_directory_dn":
         variable = ldap_spec_directory_dn
     elif variable == "create_group":
@@ -31,13 +31,13 @@ def set_default(variable):
     return variable
 def sync_data(ad_config, ldap_config, pref_config, input_dn):
 
-    config_list = ["ldap_spec_directory_dn","ldap_user_group_dn","sync_group_mode","ad_computer_search_dn","ad_user_search_dn","create_group","sync_computers"]
+    config_list = ["ldap_spec_directory_dn","ldap_user_group_dn","create_directory_mode","ad_computer_search_dn","ad_user_search_dn","create_group","sync_computers"]
     for variable in config_list:
         if variable not in pref_config:
             pref_config[variable] = set_default(variable)
     
     #PREF
-    sync_group_mode = pref_config['sync_group_mode']
+    create_directory_mode = pref_config['create_directory_mode']
     sync_computers = pref_config['sync_computers']
     create_group = pref_config['create_group']
     ad_user_search_dn = pref_config['ad_user_search_dn']
@@ -187,7 +187,7 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn):
                                         return False
                                     new_user_counter = new_user_counter + 1
                                     
-                                elif sync_group_mode and not exist_directory:
+                                elif create_directory_mode and not exist_directory:
                                     groups_dn = ldap_base_dn
                                     for directory in reversed(org_unit_list):
                                         group_str = f"{directory},{groups_dn}"
