@@ -4,6 +4,7 @@ Date: 17/11/2023
 """
 import subprocess, time, os
 from ldap3 import *
+
 def set_default(variable):
     ldap_user_group_dn = "ou=User,ou=Groups,dc=lider,dc=com"
     ldap_spec_directory_dn = "" 
@@ -12,11 +13,18 @@ def set_default(variable):
     create_directory = True
     create_group = True
     sync_computers = True
+    ldap_clean_search_dn = "dc=lider,dc=com"
+    ldap_clean_mode = True
+
 
     if variable == "ldap_user_group_dn":
         variable = ldap_user_group_dn
     elif variable == "ad_user_search_dn":
         variable = ad_user_search_dn
+    elif variable == "ldap_clean_search_dn":
+        variable = ldap_clean_search_dn
+    elif variable == "ldap_clean_mode":
+        variable = ldap_clean_mode
     elif variable == "ad_computer_search_dn":
         variable = ad_computer_search_dn
     elif variable == "create_directory":
@@ -29,21 +37,23 @@ def set_default(variable):
         variable = sync_computers
 
     return variable
-def sync_data(ad_config, ldap_config, pref_config, input_dn):
+def sync_data(ad_config, ldap_config, pref_config, input_dn, is_api):
 
-    config_list = ["ldap_spec_directory_dn","ldap_user_group_dn","create_directory_mode","ad_computer_search_dn","ad_user_search_dn","create_group","sync_computers"]
+    config_list = ["ldap_clean_mode","ldap_spec_directory_dn","ldap_clean_search_dn","ldap_user_group_dn","sync_directory_mode","ad_computer_search_dn","ad_user_search_dn","create_group","sync_computers"]
     for variable in config_list:
         if variable not in pref_config:
             pref_config[variable] = set_default(variable)
     
     #PREF
-    create_directory_mode = pref_config['create_directory_mode']
+    sync_directory_mode = pref_config['sync_directory_mode']
     sync_computers = pref_config['sync_computers']
     create_group = pref_config['create_group']
     ad_user_search_dn = pref_config['ad_user_search_dn']
     ad_computer_search_dn = pref_config['ad_computer_search_dn']
     ldap_user_group_dn = pref_config['ldap_user_group_dn']
     ldap_spec_directory = pref_config['ldap_spec_directory_dn']
+    ldap_clean_search_dn = pref_config['ldap_clean_search_dn']
+    ldap_clean_mode = bool(pref_config['ldap_clean_mode'])
 
     #ACTIVE DIRECTORY CONNECTION BLOCK
     ad_server = ad_config['ad_server']
@@ -87,8 +97,7 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn):
             }
         result = conn.add(dn, attributes=new_attributes)
         if not result:
-            print(f"Failed to add user: {conn.result}")
-            return False
+            return returnValue(is_api, 'error', conn.result)
 
     def modify_entry (conn,dn,cn,sn,givenName,mail,phoneNumber,homePostalAddress,sAMAccountName,objectType,memberOf):
         modification_dict = {}
@@ -108,7 +117,7 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn):
                 conn.modify(dn, modification_dict)
             except Exception as e:
                 print(f"Failed to modify the LDAP entry: {e}")
-                return False
+                return returnValue(is_api, 'error', e)
         for group in memberOf:
             group_dn = f"cn={group},{ldap_user_group_dn}"
             result = conn.modify(group_dn, {'member': [(MODIFY_ADD, [dn])]})
@@ -151,21 +160,18 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn):
                         if input_dn and spec_search:#spec user modify
                             search_result = conn.search(dn, '(objectClass=person)')
                             if search_result:
-                                modify_entry(conn,dn,cn,sn,givenName,mail,phoneNumber,homePostalAddress,sAMAccountName,objectType,memberOf,)
+                                response = modify_entry(conn,dn,cn,sn,givenName,mail,phoneNumber,homePostalAddress,sAMAccountName,objectType,memberOf,)
                                 print("Existing changes have been applied")
-                                return True
-                                break
+                                return returnValue(is_api, 'success', 'Existing changes have been applied')
                             else:
-                                print("user is not existing on ldap")
-                                return False
-                                break
+                                return returnValue(is_api, 'success', 'User is not existing on ldap')
                         elif not input_dn:
                             search_result = conn.search(dn, '(objectClass=person)')
                             if search_result:# user modify
                                 user_counter = user_counter + 1
                                 result = modify_entry(conn,dn,cn,sn,givenName,mail,phoneNumber,homePostalAddress,sAMAccountName,objectType,memberOf)
-                                if result is False:
-                                    return False
+                                if result is False: 
+                                    return returnValue(is_api, 'error', conn.result)
                             else: #directory modify and add new user 
                                 dir_dn = f'{ou_name},{ldap_directory}'
                                 if dir_dn not in known_directories and ou_name:
@@ -184,10 +190,10 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn):
                                         conn.delete(entry.entry_dn)
                                     result = add_entry(conn,dn,cn,sn,givenName,mail,phoneNumber,homePostalAddress,sAMAccountName,objectType,memberOf)
                                     if result is False:
-                                        return False
+                                        return returnValue(is_api, 'error', conn.result)
                                     new_user_counter = new_user_counter + 1
-                                    
-                                elif create_directory_mode and not exist_directory:
+
+                                elif sync_directory_mode and not exist_directory:
                                     groups_dn = ldap_base_dn
                                     for directory in reversed(org_unit_list):
                                         group_str = f"{directory},{groups_dn}"
@@ -205,7 +211,7 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn):
                                         conn.delete(entry.entry_dn)
                                     result = add_entry(conn,dn,cn,sn,givenName,mail,phoneNumber,homePostalAddress,sAMAccountName,objectType,memberOf)
                                     if result is False:
-                                        return False
+                                        return returnValue(is_api, 'error', conn.result)
                                     new_user_counter = new_user_counter + 1
                                     for group in memberOf:
                                         group_dn = f"cn={group},{ldap_user_group_dn}"
@@ -214,10 +220,15 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn):
 
                     elif input_dn and total_lines_ad == line_number:
                         print(f"User is not found !!")
-                        return False
+                        if is_api is True:
+                            return ({'status': 'success', 'message':'User is not found'})
+                        return True
                     elif total_lines_ad == line_number:
                         print ("Number of users : ",user_counter)
                         print ("Number of new users : ",new_user_counter)
+                        output = {'user': user_counter, 'new_user':new_user_counter}
+                        if is_api is True:
+                            return returnValue(True, 'success',f'Number of users: {user_counter} Number of new users:{new_user_counter}')
                         return True
 
                 elif line.startswith('dn:') and not spec_search :
@@ -232,12 +243,6 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn):
                         if component.startswith('CN='):
                             cn_counter = cn_counter + 1
                             if cn_counter >= 2 :
-                                '''if component[3:] == 'Computers':
-                                    formatted_components.append('ou=' + component[3:])     
-                                    formatted_components.append("ou=Agents")
-                                    ou_name = 'ou=Agents
-                                else:'''
-
                                 ou_name = ('ou=' + component[3:])
                                 formatted_components.append('ou=' + component[3:])
 
@@ -315,6 +320,49 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn):
             print()
         conn.unbind()
                 
+    def cleanLdap(filename_ad, total_lines_ad):
+        user_counter,deleted_user_counter = 0,0
+        server = Server(ad_server, port=ad_port)
+        conn = Connection(server, user=ad_username, password=ad_password, auto_bind=True)
+        dn,uid =" "," "
+        with open(filename_ad, 'r') as file:
+            for line_number, line in enumerate(file, start=1):
+                if line.startswith('#') or line.startswith(' '):
+                    if uid != " " :
+                        filter_str = f'(sAMAccountName={uid})'
+                        res = conn.search(ad_base_dn, filter_str)
+                        if conn.entries:
+                            user_counter = user_counter + 1
+                        else:
+                            server_ldap = Server(ldap_server, port=ldap_port)
+                            conn_ldap = Connection(server_ldap, user=ldap_admin_username, password=ldap_admin_password, auto_bind=True)
+                            res = conn_ldap.delete(dn)
+                            if res is True:
+                                deleted_user_counter += 1
+                            else:
+                                return returnValue(is_api, 'error', conn_ldap.result)
+
+                        dn,uid = " "," "
+                    elif total_lines_ad == line_number:
+                        print ("Number of users : ",user_counter)
+                        print ("Number of deleted users : ",deleted_user_counter)
+                        if is_api is True:
+                            return  returnValue(True,'success', f'Number of deleted users:{deleted_user_counter}')
+                        return True
+                
+                elif line.startswith('dn:'):
+                    dn = line.strip()
+                    dn = content(dn)
+                elif line.startswith('uid:'):
+                    uid = line.strip()
+                    uid = content(uid)
+
+                progress = (line_number + 1) / total_lines_ad * 100
+                print(f"Progress: {progress:.0f}%", end='', flush=True)
+                backspaces = len(f"Progress ({progress:.0f}%)")
+                print('\b' * backspaces, end='', flush=True)
+            print()
+        conn.unbind()
 
 
     def getLdapGroups():
@@ -326,27 +374,31 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn):
         for entry in conn.entries:
             ldap_existing_groups.append(entry.cn)
         conn.unbind()
+    def returnValue(is_api, status, message):
+        if is_api is True:
+            return ({'status': status, 'message': message})
+        elif is_api is False and status == 'success':
+            return True
+        elif is_api is False and status == 'error':
+            return False
 
     def content(content):
         converted = content.split(": ")
         content = converted[1]
         return content
 
-
     start_time = time.time()
     delete_ldif = f'rm ad_users.ldif'
     if os.path.exists(delete_ldif):
         subprocess.run(delete_ldif, shell=True)
 
-    command_ad = f'ldapsearch -x -D {ad_username} -w {ad_password} -H ldap://{ad_server}:{ad_port} -b {ad_user_search_dn} "(&(objectClass=person)(objectCategory=person)(!(sAMAccountName=krbtgt))(!(sAMAccountName=Administrator))(!(sAMAccountName=Guest)) )" -s sub -E pr=1000/noprompt  cn sn telephoneNumber mail homePostalAddress givenName sAMAccountName memberOf > ad_users.ldif'
+    command_ad = f'ldapsearch -x -D {ad_username} -w {ad_password} -H ldap://{ad_server}:{ad_port} -b {ad_user_search_dn} "(&(objectClass=person)(objectCategory=person)(!(sAMAccountName=krbtgt))(!(sAMAccountName=Administrator))(!(sAMAccountName=Guest)))" -s sub -E pr=1000/noprompt cn sn telephoneNumber mail homePostalAddress givenName sAMAccountName memberOf > ad_users.ldif'
     result_ad = subprocess.run(command_ad, shell=True,stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     print("Fetching - Active Directory Users...")
-    
     if sync_computers is True:
         command_ad_computer = f'ldapsearch -x -b {ad_computer_search_dn} -H ldap://{ad_server}:{ad_port} -D {ad_username} -w {ad_password} "(objectClass=computer)" >> ad_users.ldif'
         print("Fetching - Active Directory Computers...")
         result_ad_computer = subprocess.run(command_ad_computer, shell=True,stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-
 
 
     if result_ad.returncode == 0:
@@ -361,10 +413,38 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn):
     file_path = 'ad_users.ldif'
     print("Synchronization is in progress...")
     getLdapGroups()
+    json_response = ""
     if input_dn is None:
         result = search_lines(file_path, total_lines_ad, input_dn)
-        return result
+        if ldap_clean_mode is True:
+            json_response = result
+        else:
+            return result
     else:
         print("mode : the single user search")
         result = search_lines(file_path, total_lines_ad, input_dn)
         return result
+
+    if ldap_clean_mode is True:
+        delete_ldif = f'rm ldap_users.ldif'
+        if os.path.exists(delete_ldif):
+            subprocess.run(delete_ldif, shell=True)
+
+        command_ldap = f'ldapsearch -x -D {ldap_admin_username} -w {ldap_admin_password} -H ldap://{ldap_server}:{ldap_port} -b {ldap_clean_search_dn} "(objectClass=person)" -s sub -E pr=1000/noprompt uid  > ldap_users.ldif'
+        result_ldap = subprocess.run(command_ldap, shell=True,stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        file_path = 'ldap_users.ldif'
+        print("Fetching - openLDAP Users...")
+        if result_ldap.returncode == 0:
+            print("Successfully fetched.")
+            total_lines_ldap = int(subprocess.check_output(["wc", "-l", "ldap_users.ldif"]).split()[0])
+            print(result_ldap.stdout)
+            print("Deletion of unmatched entries is in progress...")
+            result = cleanLdap(file_path, total_lines_ldap)
+            result['message'] = json_response['message'] + ' ' + result['message'] 
+            return result
+        else:
+            print("Fetching failed program will execute with existing ldif file. Error:")
+            print(result_ldap.stderr)
+
+
+

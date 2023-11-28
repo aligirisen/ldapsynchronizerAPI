@@ -144,4 +144,5 @@ def test_connections(ad_config, ldap_config):
         finally:
             conn_ad.unbind()
     return True
+
 # Create your tests here

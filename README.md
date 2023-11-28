@@ -35,7 +35,19 @@ ad_computer_search_dn = dc=ornek,dc=local
 ### Sync computers mode
 ``` sync_computer = True ```
 
-### Example Request Body:
+### Ldap clean mode ( deletes the users that does not match with active directory)
+``` ldap_clean_mode = True ```
+
+### Ldap clean search dn
+``` ldap_clean_search_dn = dc=example,dc=local ```
+
+### Execute Standalone
+``` python3 manage.py source ```
+
+### Execute Test Standalone
+``` python3 manage.py test ```
+
+### Instance Request Body:
 ```
 {
     "ad_config": {
