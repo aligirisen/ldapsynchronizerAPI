@@ -9,7 +9,7 @@ synchronizer API for active directory to ldap
 ## Test your connection and credentials.
 ##### /syncapp/test
 
-## Sync Active Directory server to lider.
+## Sync Active Directory server to openldap.
 ##### /syncapp/sync
 
 ## Get status of sync operation.
