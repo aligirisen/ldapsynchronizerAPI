@@ -6,6 +6,17 @@ import subprocess, time, os
 from ldap3 import *
 import threading
 sync_event = threading.Event()
+shared_progress = 0
+progress_lock = threading.Lock()
+
+class MyThread(threading.Thread):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.result = None
+    def run(self):
+        result = shared_progress
+        self.result = result
+
 
 def set_default(variable):
     ldap_user_group_dn = "ou=User,ou=Groups,dc=lider,dc=com"
@@ -31,6 +42,7 @@ def set_default(variable):
 
     return variable
 def sync_data(ad_config, ldap_config, pref_config, input_dn, is_api):
+    global shared_progress
     
     try:
         sync_event.set()
@@ -149,9 +161,11 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn, is_api):
 
 
         def search_lines(filename_ad, total_lines_ad, input_dn):
+            global shared_progress
+
             user_counter,new_user_counter = 0,0
             spec_search = False
-            server = Server(ldap_server, port=ldap_port)
+            server = Server(ldap_server, port=ldap_port, connect_timeout=2)
             conn = Connection(server, user=ldap_admin_username, password=ldap_admin_password, auto_bind=True)
             dn,cn,sn,givenName,mail,phoneNumber,homePostalAddress,sAMAccountName,objectType,memberOf = " " , " ", " ", " ", " ", " ", " ", " "," " , []
             with open(filename_ad, 'r') as file:
@@ -315,6 +329,8 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn, is_api):
                             memberOf.append(group)
 
                     progress = (line_number + 1) / total_lines_ad * 100
+                    with progress_lock:
+                        shared_progress = progress
                     print(f"Progress: {progress:.0f}%", end='', flush=True)
                     backspaces = len(f"Progress ({progress:.0f}%)")
                     print('\b' * backspaces, end='', flush=True)
@@ -323,7 +339,7 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn, is_api):
                     
         def cleanLdap(filename_ad, total_lines_ad):
             user_counter,deleted_user_counter = 0,0
-            server = Server(ad_server, port=ad_port)
+            server = Server(ad_server, port=ad_port, connect_timeout=2)
             conn = Connection(server, user=ad_username, password=ad_password, auto_bind=True)
             dn,uid =" "," "
             with open(filename_ad, 'r') as file:
@@ -335,7 +351,7 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn, is_api):
                             if conn.entries:
                                 user_counter = user_counter + 1
                             else:
-                                server_ldap = Server(ldap_server, port=ldap_port)
+                                server_ldap = Server(ldap_server, port=ldap_port,connect_timeout=2)
                                 conn_ldap = Connection(server_ldap, user=ldap_admin_username, password=ldap_admin_password, auto_bind=True)
                                 res = conn_ldap.delete(dn)
                                 if res is True:
@@ -367,7 +383,7 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn, is_api):
 
 
         def getLdapGroups():
-            server = Server(ldap_server, port=ldap_port)
+            server = Server(ldap_server, port=ldap_port, connect_timeout=2)
             conn = Connection(server, user=ldap_admin_username, password=ldap_admin_password, auto_bind=True)
 
             search_filter = "(objectClass=groupOfNames)"
@@ -387,6 +403,8 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn, is_api):
             converted = content.split(": ")
             content = converted[1]
             return content
+
+
 
         start_time = time.time()
         delete_ldif = f'rm ad_users.ldif'
@@ -446,8 +464,6 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn, is_api):
             else:
                 print("Fetching failed program will execute with existing ldif file. Error:")
                 print(result_ldap.stderr)
-
-
 
     finally:
         sync_event.clear()

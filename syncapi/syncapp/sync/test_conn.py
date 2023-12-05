@@ -37,8 +37,8 @@ def test_connections(ad_config, ldap_config):
         result_add = conn.add(dn, attributes=new_attributes)
         return result_add
 
-    # default test 
-    server = Server(ldap_server, ldap_port)
+    # default test
+    server = Server(ldap_server, ldap_port, connect_timeout=2)
     conn = Connection(server,user=ldap_admin_username,password=ldap_admin_password)
 
     if not conn.bind():
@@ -120,7 +120,7 @@ def test_connections(ad_config, ldap_config):
 
 
 
-    server_ad = Server(ad_server, ad_port)
+    server_ad = Server(ad_server, ad_port, connect_timeout=3)
     conn_ad = Connection(server_ad,user=ad_username,password=ad_password)
 
     if not conn_ad.bind():
