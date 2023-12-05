@@ -4,14 +4,16 @@ synchronizer API for active directory to ldap
 
 ## Config Guide ( Connection configs are required as expected, except pref_conf which is existing for detailed settings )
 
+-----------------------------------------------------
+
 ## Test your connection and credentials.
-#####/syncapp/test
+##### /syncapp/test
 
 ## Sync Active Directory server to lider.
-#####/syncapp/sync
+##### /syncapp/sync
 
 ## Get status of sync operation.
-#####/syncapp/sync/status
+##### /syncapp/sync/status
 
 
 ### Groups directory (cn=DnsAdmins ...)
