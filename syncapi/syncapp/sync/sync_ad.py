@@ -5,18 +5,24 @@ Date: 17/11/2023
 import subprocess, time, os
 from ldap3 import *
 import threading
+import datetime, pytz
+
+
 sync_event = threading.Event()
 shared_progress = 0
+utc_start = None
 progress_lock = threading.Lock()
 
 class MyThread(threading.Thread):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.result = None
+        self.utc = None
     def run(self):
         result = shared_progress
         self.result = result
-
+        utc = utc_start
+        self.utc = utc
 
 def set_default(variable):
     ldap_user_group_dn = "ou=User,ou=Groups,dc=lider,dc=com"
@@ -25,6 +31,7 @@ def set_default(variable):
     create_group = True
     sync_computers = True
     ldap_clean_mode = True
+    time_zone = "Europe/Istanbul"
 
 
     if variable == "ldap_user_group_dn":
@@ -39,10 +46,13 @@ def set_default(variable):
         variable = create_group
     elif variable == "sync_computers":
         variable = sync_computers
+    elif variable == "time_zone":
+        variable = time_zone
 
     return variable
 def sync_data(ad_config, ldap_config, pref_config, input_dn, is_api):
     global shared_progress
+    global utc_start
     
     try:
         sync_event.set()
@@ -61,7 +71,7 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn, is_api):
         ldap_admin_password = ldap_config['ldap_admin_password']
         ldap_base_dn = ldap_config['ldap_base_dn']
 
-        config_list = ["ldap_clean_mode","ldap_spec_directory_dn","ldap_clean_search_dn","ldap_user_group_dn","sync_directory_mode","ad_computer_search_dn","ad_user_search_dn","create_group","sync_computers"]
+        config_list = ["ldap_clean_mode","ldap_spec_directory_dn","ldap_clean_search_dn","ldap_user_group_dn","sync_directory_mode","ad_computer_search_dn","ad_user_search_dn","create_group","sync_computers","time_zone"]
         for variable in config_list:
 
             if variable == "ad_computer_search_dn" or variable == "ldap_clean_search_dn" or variable == "ad_user_search_dn":
@@ -81,10 +91,14 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn, is_api):
         ldap_spec_directory = pref_config['ldap_spec_directory_dn']
         ldap_clean_search_dn = pref_config['ldap_clean_search_dn']
         ldap_clean_mode = bool(pref_config['ldap_clean_mode'])
+        time_zone = pref_config['time_zone']
 
         ldap_existing_groups = []
         known_directories = []
         ou_name = ""
+
+        target_timezone = pytz.timezone(time_zone)
+        utc_start = datetime.datetime.now(target_timezone).strftime('%Y-%m-%d %H:%M')
 
         def add_entry (conn,dn,cn,sn,givenName,mail,phoneNumber,homePostalAddress,sAMAccountName,objectType,memberOf):
             if objectType == "Computer":
@@ -243,6 +257,13 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn, is_api):
                             print ("Number of new users : ",new_user_counter)
                             output = {'user': user_counter, 'new_user':new_user_counter}
                             if is_api is True:
+                                file_path = "output.txt"
+                                try:
+                                    with open(file_path, 'w') as file:
+                                        file.write(f'Number of users: {user_counter} Number of new users:{new_user_counter}')
+                                except Exception as e:
+                                    return returnValue(False, 'error',e)
+
                                 return returnValue(True, 'success',f'Number of users: {user_counter} Number of new users:{new_user_counter}')
                             return True
 
@@ -364,6 +385,10 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn, is_api):
                             print ("Number of users : ",user_counter)
                             print ("Number of deleted users : ",deleted_user_counter)
                             if is_api is True:
+                                file_path = "output.txt"
+                                if os.path.exists(file_path):
+                                    with open(file_path, 'w') as file:
+                                        file.write(f'Number of deleted users:{deleted_user_counter}')
                                 return  returnValue(True,'success', f'Number of deleted users:{deleted_user_counter}')
                             return True
                     
@@ -459,8 +484,11 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn, is_api):
                 print(result_ldap.stdout)
                 print("Deletion of unmatched entries is in progress...")
                 result = cleanLdap(file_path, total_lines_ldap)
-                result['message'] = json_response['message'] + ' ' + result['message'] 
-                return result
+                if is_api is True:
+                    result['message'] = json_response['message'] + ' ' + result['message'] 
+                    return result
+                else:
+                    return result
             else:
                 print("Fetching failed program will execute with existing ldif file. Error:")
                 print(result_ldap.stderr)
