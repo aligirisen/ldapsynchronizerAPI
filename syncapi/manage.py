@@ -17,7 +17,6 @@ def GetConfigs():
 
     config_pref = configparser.ConfigParser()
     config_pref.read(config_pref_path)
-    print(config_pref_path)
 
     #PREF
     pref_config["sync_directory_mode"] = config_pref.get('PREF','sync_directory')
