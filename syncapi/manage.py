@@ -8,11 +8,16 @@ from syncapp.sync import sync_ad,test_conn
 def GetConfigs():
 
     ad_config,ldap_config,pref_config = {},{},{}
+
+    config_path = "/etc/syncapi/config/config.ini"
+    config_pref_path = "/etc/syncapi/config/pref_config.ini"
+
     config = configparser.ConfigParser()
-    config.read('config.ini')
+    config.read(config_path)
 
     config_pref = configparser.ConfigParser()
-    config_pref.read('pref_config.ini')
+    config_pref.read(config_pref_path)
+    print(config_pref_path)
 
     #PREF
     pref_config["sync_directory_mode"] = config_pref.get('PREF','sync_directory')
