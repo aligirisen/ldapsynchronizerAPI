@@ -1,10 +1,11 @@
 Source: syncapi
 Section: web
 Priority: optional
-Maintainer: Ali Rıza Girişen (ali.girisen@pardus.org.tr)
+Maintainer: Ali Rıza Girişen <ali.girisen@pardus.org.tr>
 Build-Depends: debhelper (>= 12), python3
 
 Package: syncapi
 Architecture: all
 Depends: python3
 Description: Synchronizer active directory to openLDAP
+postinst: debian/postinst
