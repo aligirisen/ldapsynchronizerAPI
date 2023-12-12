@@ -3,4 +3,16 @@
 set -e
 
 echo "To complete the installation, please run the following commands:"
+echo "sudo apt install pip"
+if ! command -v pip &> /dev/null; then
+	sudo apt-get install -y pip
+fi
+#sudo apt install pip
 echo "pip install -r  /usr/share/syncapi/requirements.txt"
+pip install -r  /usr/share/syncapi/requirements.txt
+
+case "$1" in
+	configure)
+		systemctl enable syncapi
+		;;
+esac

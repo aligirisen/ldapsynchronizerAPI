@@ -1,3 +1,4 @@
 syncapi/* /usr/bin/syncapi/
 requirements.txt /usr/share/syncapi/
 config/* /etc/syncapi/config/
+syncapi.service /etc/systemd/system/

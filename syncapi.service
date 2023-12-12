@@ -1,0 +1,9 @@
+[Unit]
+Description=Synchronize tool Active Directory to OpenLDAP
+
+[Service]
+ExecStart=/bin/bash -c '/usr/bin/python3 /usr/bin/syncapi/manage.py runserver -v 2'
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

@@ -26,11 +26,11 @@ def sync_api(request):
                 with progress_lock:
                     progress_thread = MyThread(target=MyThread.run)
                     progress_thread.start()
-                return JsonResponse({'message': f'Please wait... Sync operation is already in progress {progress_thread.result:.0f}%. Started at {progress_thread.utc}'})
+                return JsonResponse({'status': 'InProgress', 'message': f'Please wait... Synchronization progress is already in progress' ,'started_at':progress_thread.utc ,'progress': f'{progress_thread.result:.0f}%'})
             sync_thread = threading.Thread(target=sync_data, args=(ad_config, ldap_config, pref_config, input_dn, True))
             sync_thread.start()
 
-            return JsonResponse ({'message': 'Sync operation is in progress'}, safe=False)
+            return JsonResponse ({'status': 'Started', 'message': 'Synchronization progress has been started'}, safe=False)
 
         except json.JSONDecodeError:
             return JsonResponse({'error': 'Invalid JSON format in the request body'},status=400)
@@ -56,24 +56,24 @@ def test_api(request):
 @csrf_exempt
 def status_api(request):
     if request.method == 'GET':
-        try:
-            if sync_event.is_set():
-                with progress_lock:
-                    progress_thread = MyThread(target=MyThread.run)
-                    progress_thread.start()
-                return JsonResponse({'message': f'Started at {progress_thread.utc}. Progress: {progress_thread.result:.0f}%'})
-            else:
-                file_path = 'output.txt'
-                if os.path.exists(file_path):
-                    output = ""
-                    with open(file_path, 'r') as file:
-                        for line_number, line in enumerate(file, start=1):
-                            output += line
-                    os.remove(file_path)
+        #try:
+        if sync_event.is_set():
+            with progress_lock:
+                progress_thread = MyThread(target=MyThread.run)
+                progress_thread.start()
+            return JsonResponse({'status': 'InProgress', 'started_at':progress_thread.utc ,'progress': f'{progress_thread.result:.0f}%'})
+        else:
+            file_path = 'output.json'
+            if os.path.exists(file_path):
+                with open(file_path, 'r') as file:
+                    data = json.load(file)
+                    data['status'] = 'Success'
+                os.remove(file_path)
+                return JsonResponse(data)
 
-                return JsonResponse({'message': 'There is no more existing operation'})
-            return JsonResponse(result, safe=False)
-        except json.JSONDecodeError:
-            return JsonResponse({'error': ''},status=400)
+            return JsonResponse({'status': 'NotExist' , 'message': 'There is no more existing process'})
+        return JsonResponse(result, safe=False)
+        #except json.JSONDecodeError:
+        #    return JsonResponse({'error': ''},status=400)
     else:
         return JsonResponse({'error':'Invalid request method'})

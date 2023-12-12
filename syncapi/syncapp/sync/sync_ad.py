@@ -4,7 +4,7 @@ Date: 17/11/2023
 """
 import subprocess, time, os
 from ldap3 import *
-import threading
+import threading, json
 import datetime, pytz
 
 
@@ -24,7 +24,7 @@ class MyThread(threading.Thread):
         utc = utc_start
         self.utc = utc
 
-def set_default(variable):
+def set_default(variable):#default variables
     ldap_user_group_dn = "ou=User,ou=Groups,dc=lider,dc=com"
     ldap_spec_directory_dn = "" 
     create_directory = True
@@ -255,14 +255,18 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn, is_api):
                         elif total_lines_ad == line_number:
                             print ("Number of users : ",user_counter)
                             print ("Number of new users : ",new_user_counter)
-                            output = {'user': user_counter, 'new_user':new_user_counter}
+                            utc_end = datetime.datetime.now(target_timezone).strftime('%Y-%m-%d %H:%M')
                             if is_api is True:
-                                file_path = "output.txt"
-                                try:
-                                    with open(file_path, 'w') as file:
-                                        file.write(f'Number of users: {user_counter} Number of new users:{new_user_counter}')
-                                except Exception as e:
-                                    return returnValue(False, 'error',e)
+                                output = {
+                                        "user": user_counter,
+                                        "new_user": new_user_counter,
+                                        "started_at": f"{utc_start}",
+                                        "finished_at": f"{utc_end}"
+                                        }
+                                file_path = "output.json"
+                                json_object = json.dumps(output, indent=4)
+                                with open(file_path, 'w') as file:
+                                    file.write(json_object)
 
                                 return returnValue(True, 'success',f'Number of users: {user_counter} Number of new users:{new_user_counter}')
                             return True
@@ -469,6 +473,7 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn, is_api):
             result = search_lines(file_path, total_lines_ad, input_dn)
             return result
 
+
         if ldap_clean_mode is True:
             delete_ldif = f'rm ldap_users.ldif'
             if os.path.exists(delete_ldif):
@@ -492,6 +497,6 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn, is_api):
             else:
                 print("Fetching failed program will execute with existing ldif file. Error:")
                 print(result_ldap.stderr)
-
     finally:
+        os.remove("ad_users.ldif")
         sync_event.clear()
