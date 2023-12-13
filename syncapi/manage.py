@@ -6,30 +6,36 @@ from syncapp.sync import sync_ad,test_conn
 
 
 def GetConfigs():
-
     ad_config,ldap_config,pref_config = {},{},{}
 
     config_path = "/etc/syncapi/config/config.ini"
     config_pref_path = "/etc/syncapi/config/pref_config.ini"
+
+    if os.path.exists(config_path):
+        pass
+    else:
+        config_path = "config/config.ini"
+        config_pref_path = "config/pref_config.ini"
+
 
     config = configparser.ConfigParser()
     config.read(config_path)
 
     config_pref = configparser.ConfigParser()
     config_pref.read(config_pref_path)
-
+    
     #PREF
-    pref_config["sync_directory_mode"] = config_pref.get('PREF','sync_directory')
+    pref_config["sync_directory_mode"] = config_pref.get('PREF','sync_directory_mode')
     pref_config["ad_user_search_dn"] = config_pref.get('PREF','ad_user_search_dn')
     pref_config["ad_computer_search_dn"] = config_pref.get('PREF','ad_computer_search_dn')
-    pref_config["ldap_directory_domain_dn"] = config_pref.get('PREF','ldap_default_directory_dn')
-    pref_config["ldap_user_group_dn"] = config_pref.get('PREF','ldap_user_group_dn')
+    pref_config["ldap_group_dn"] = config_pref.get('PREF','ldap_group_dn')
     pref_config["ldap_spec_directory"] = config_pref.get('PREF','ldap_spec_directory_dn')
     pref_config["create_group"] = config_pref.get('PREF', 'create_group')
     pref_config["sync_computers"] = config_pref.get('PREF', 'sync_computers')
-
     pref_config["ldap_clean_mode"] = config_pref.get('PREF', 'ldap_clean_mode')
     pref_config["ldap_clean_search_dn"] = config_pref.get('PREF', 'ldap_clean_search_dn')
+    pref_config["time_zone"] = config_pref.get('PREF', 'time_zone')
+    
     #ACTIVE DIRECTORY CONNECTION BLOCK
     ad_config["ad_server"] = config.get('AD','ad_server')
     ad_config["ad_port"] = int(config.get('AD','ad_port'))

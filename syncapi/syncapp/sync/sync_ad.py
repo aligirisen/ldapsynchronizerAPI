@@ -25,7 +25,6 @@ class MyThread(threading.Thread):
         self.utc = utc
 
 def set_default(variable):#default variables
-    ldap_user_group_dn = "ou=User,ou=Groups,dc=lider,dc=com"
     ldap_spec_directory_dn = "" 
     create_directory = True
     create_group = True
@@ -34,9 +33,7 @@ def set_default(variable):#default variables
     time_zone = "Europe/Istanbul"
 
 
-    if variable == "ldap_user_group_dn":
-        variable = ldap_user_group_dn
-    elif variable == "ldap_clean_mode":
+    if variable == "ldap_clean_mode":
         variable = ldap_clean_mode
     elif variable == "create_directory":
         variable = create_directory
@@ -71,23 +68,24 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn, is_api):
         ldap_admin_password = ldap_config['ldap_admin_password']
         ldap_base_dn = ldap_config['ldap_base_dn']
 
-        config_list = ["ldap_clean_mode","ldap_spec_directory_dn","ldap_clean_search_dn","ldap_user_group_dn","sync_directory_mode","ad_computer_search_dn","ad_user_search_dn","create_group","sync_computers","time_zone"]
+        config_list = ["ldap_clean_mode","ldap_spec_directory_dn","ldap_clean_search_dn","ldap_group_dn","sync_directory_mode","ad_computer_search_dn","ad_user_search_dn","create_group","sync_computers","time_zone"]
         for variable in config_list:
 
-            if variable == "ad_computer_search_dn" or variable == "ldap_clean_search_dn" or variable == "ad_user_search_dn":
+            if variable == "ad_computer_search_dn" or variable == "ldap_clean_search_dn" or variable == "ad_user_search_dn" or variable == 'ldap_group_dn':
                 pref_config['ad_user_search_dn'] = ad_base_dn
                 pref_config['ad_computer_search_dn'] = ad_base_dn
                 pref_config['ldap_clean_search_dn'] = ldap_base_dn
+                pref_config['ldap_group_dn'] = f"ou=Groups,{ldap_base_dn}"
             elif variable not in pref_config:
                 pref_config[variable] = set_default(variable)
         
         #PREF
-        sync_directory_mode = pref_config['sync_directory_mode']
-        sync_computers = pref_config['sync_computers']
-        create_group = pref_config['create_group']
+        sync_directory_mode = bool(pref_config['sync_directory_mode'])
+        sync_computers = bool(pref_config['sync_computers'])
+        create_group = bool(pref_config['create_group'])
         ad_user_search_dn = pref_config['ad_user_search_dn']
         ad_computer_search_dn = pref_config['ad_computer_search_dn']
-        ldap_user_group_dn = pref_config['ldap_user_group_dn']
+        ldap_group_dn = pref_config['ldap_group_dn']
         ldap_spec_directory = pref_config['ldap_spec_directory_dn']
         ldap_clean_search_dn = pref_config['ldap_clean_search_dn']
         ldap_clean_mode = bool(pref_config['ldap_clean_mode'])
@@ -146,7 +144,7 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn, is_api):
                     print(f"Failed to modify the LDAP entry: {e}")
                     return returnValue(is_api, 'error', e)
             for group in memberOf:
-                group_dn = f"cn={group},{ldap_user_group_dn}"
+                group_dn = f"cn={group},{ldap_group_dn}"
                 result = conn.modify(group_dn, {'member': [(MODIFY_ADD, [dn])]})
                 if not result and create_group is True:
                     object_class = ['top','groupOfNames']
@@ -161,10 +159,10 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn, is_api):
 
 
             search_filter_groups = f"(&(objectClass=groupOfNames)(member={dn}))"
-            user_membership = conn.search(ldap_user_group_dn, search_filter=search_filter_groups)
+            user_membership = conn.search(ldap_group_dn, search_filter=search_filter_groups)
             if user_membership:
                 for group in ldap_existing_groups:
-                    group_dn = f"cn={group},{ldap_user_group_dn}"
+                    group_dn = f"cn={group},{ldap_group_dn}"
                     group_existing = conn.compare(group_dn, "member", dn)
                     if group_existing:
                         if group not in memberOf:
@@ -182,6 +180,14 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn, is_api):
             server = Server(ldap_server, port=ldap_port, connect_timeout=2)
             conn = Connection(server, user=ldap_admin_username, password=ldap_admin_password, auto_bind=True)
             dn,cn,sn,givenName,mail,phoneNumber,homePostalAddress,sAMAccountName,objectType,memberOf = " " , " ", " ", " ", " ", " ", " ", " "," " , []
+
+            if ldap_group_dn:
+                is_exist_directory = conn.search(ldap_group_dn,'(objectClass=*)')
+                if is_exist_directory is False and sync_directory_mode is True:
+                    groups_attributes = {
+                            'objectClass': ['top','pardusLider', 'organizationalUnit'],
+                            }
+                    result = conn.add(ldap_group_dn, attributes=groups_attributes)
             with open(filename_ad, 'r') as file:
                 for line_number, line in enumerate(file, start=1):
                     if line.startswith('#') or line.startswith(' '):
@@ -222,7 +228,7 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn, is_api):
                                             return returnValue(is_api, 'error', conn.result)
                                         new_user_counter = new_user_counter + 1
 
-                                    elif sync_directory_mode and not exist_directory:
+                                    elif sync_directory_mode is True and not exist_directory:
                                         groups_dn = ldap_base_dn
                                         for directory in reversed(org_unit_list):
                                             group_str = f"{directory},{groups_dn}"
@@ -243,7 +249,7 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn, is_api):
                                             return returnValue(is_api, 'error', conn.result)
                                         new_user_counter = new_user_counter + 1
                                         for group in memberOf:
-                                            group_dn = f"cn={group},{ldap_user_group_dn}"
+                                            group_dn = f"cn={group},{ldap_group_dn}"
                                             conn.modify(group_dn, {'member': [(MODIFY_ADD, [dn])]})
                             dn,cn,sn,givenName,mail,homePostalAddress,phoneNumber,sAMAccountName,objectType,memberOf = " ", " ", " ", " ", " ", " ", " ", " "," ", []
 
@@ -343,14 +349,14 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn, is_api):
                         group = line.strip()
                         components = group.split(",")
                         group = components[0].split('=')[1]
-                        if group == "Administrators":
+                        '''if group == "Administrators":
                             group = "adminGroups"
                         elif group == "Domain Admins":
-                            group = "domainAdminGroup"
-                        elif not create_group:
+                            group = "domainAdminGroup"'''
+                        if not create_group:
                             group = ""
-                        
-                        if group:
+                        #if group:
+                        else :
                             memberOf.append(group)
 
                     progress = (line_number + 1) / total_lines_ad * 100
@@ -416,10 +422,11 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn, is_api):
             conn = Connection(server, user=ldap_admin_username, password=ldap_admin_password, auto_bind=True)
 
             search_filter = "(objectClass=groupOfNames)"
-            result = conn.search(ldap_user_group_dn,search_filter,attributes=["cn"])
+            conn.search(ldap_group_dn,search_filter,attributes=["cn"])
             for entry in conn.entries:
                 ldap_existing_groups.append(entry.cn)
             conn.unbind()
+
         def returnValue(is_api, status, message):
             if is_api is True:
                 return ({'status': status, 'message': message})
@@ -489,6 +496,7 @@ def sync_data(ad_config, ldap_config, pref_config, input_dn, is_api):
                 print(result_ldap.stdout)
                 print("Deletion of unmatched entries is in progress...")
                 result = cleanLdap(file_path, total_lines_ldap)
+                os.remove("ldap_users.ldif")
                 if is_api is True:
                     result['message'] = json_response['message'] + ' ' + result['message'] 
                     return result
